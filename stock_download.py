@@ -60,12 +60,29 @@ def download_stock_list():
     except Exception as e:
         return False, f"下载股票列表失败：{str(e)}"
 
+def clear_stock_daily():
+    """清空股票交易数据表"""
+    try:
+        conn = sqlite3.connect('stock_data.db')
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM stock_daily')
+        conn.commit()
+        conn.close()
+        return True, "已清空历史交易数据"
+    except Exception as e:
+        return False, f"清空历史数据失败：{str(e)}"
+
 def download_stock_data(progress=gr.Progress()):
     """下载所有股票的90天交易数据"""
     global is_downloading
     is_downloading = True
     
     try:
+        # 先清空历史数据
+        success, message = clear_stock_daily()
+        if not success:
+            return False, message
+            
         conn = sqlite3.connect('stock_data.db')
         stocks = pd.read_sql("SELECT code FROM stocks", conn)
         
