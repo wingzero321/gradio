@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
+import sqlite3
 
 def calculate_kdj(high, low, close, n=9, m1=3, m2=3):
     """KDJ计算函数"""
@@ -64,13 +65,18 @@ def plot_stock_kline(stock_code="000001"):
                                    start_date=start_date,
                                    end_date=end_date,
                                    adjust="qfq")
+            print(df)
         
         if df.empty:
             return None, "No data available"
         
-        # 确保日期索引
+        # 确保日期索引格式正确
         if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index)
+            if '日期' in df.columns:
+                df['日期'] = pd.to_datetime(df['日期'])
+                df.set_index('日期', inplace=True)
+            else:
+                df.index = pd.to_datetime(df.index)
         
         # 计算KDJ
         k, d, j = calculate_kdj(df['最高'], df['最低'], df['收盘'])
@@ -104,7 +110,7 @@ def plot_stock_kline(stock_code="000001"):
                     linewidth=1)
         
         ax1.set_xticks(range(len(df)))
-        ax1.set_xticklabels(df.index.strftime('%m-%d'), rotation=45)
+        ax1.set_xticklabels([d.strftime('%Y-%m-%d') for d in df.index], rotation=45)
         ax1.grid(True, linestyle='--', alpha=0.3)
         ax1.set_ylabel('Price')
         
@@ -117,7 +123,7 @@ def plot_stock_kline(stock_code="000001"):
             ax2.bar(i, df['成交量'].iloc[i]/10000, color=color, width=0.8)
         
         ax2.set_xticks(range(len(df)))
-        ax2.set_xticklabels(df.index.strftime('%m-%d'), rotation=45)
+        ax2.set_xticklabels([d.strftime('%Y-%m-%d') for d in df.index], rotation=45)
         ax2.grid(True, linestyle='--', alpha=0.3)
         ax2.set_ylabel('Volume(K)')
         
@@ -130,7 +136,7 @@ def plot_stock_kline(stock_code="000001"):
         ax3.plot(range(len(df)), j, 'r-', label='J', linewidth=1)
         
         ax3.set_xticks(range(len(df)))
-        ax3.set_xticklabels(df.index.strftime('%m-%d'), rotation=45)
+        ax3.set_xticklabels([d.strftime('%Y-%m-%d') for d in df.index], rotation=45)
         ax3.grid(True, linestyle='--', alpha=0.3)
         ax3.legend(loc='upper right')
         ax3.set_ylabel('Value')
@@ -157,40 +163,41 @@ def plot_stock_kline(stock_code="000001"):
         # 出错时也要返回两个值
         return None, f"Error: {str(e)}"
 
-def get_stock_list():
-    """获取股票列表"""
+def get_stock_choices():
+    """从数据库获取股票列表"""
     try:
-        # 获取A股列表
-        stock_list = ak.stock_zh_a_spot_em()
-        # 构建选项列表：代码 - 名称
-        choices = [f"{row['代码']} - {row['名称']}" for _, row in stock_list.iterrows()]
-        # 添加上证指数
-        choices.insert(0, "000001 - 上证指数")
+        conn = sqlite3.connect('stock_data.db')
+        df = pd.read_sql("SELECT code, name FROM stocks", conn)
+        conn.close()
+        
+        # 将代码和名称组合成选项列表：格式如 "600000 浦发银行"
+        choices = [f"{row['code']} {row['name']}" for _, row in df.iterrows()]
+        if not choices:
+            choices = ["请先下载股票数据"]
         return choices
     except Exception as e:
-        print(f"Error getting stock list: {str(e)}")
-        return ["000001 - 上证指数"]  # 返回默认选项
+        print(f"获取股票列表失败：{str(e)}")
+        return ["数据库错误，请检查数据下载"]
 
 def create_query_tab():
     """创建股票查询标签页"""
     with gr.Column() as query_tab:
-        gr.Markdown("### Real-time Stock Analysis")
-        
-        # 获取股票列表
-        stock_choices = get_stock_list()
+        gr.Markdown("## 股票数据查询")
         
         with gr.Row():
             with gr.Column(scale=4):
-                # 修改下拉菜单参数
+                stock_choices = get_stock_choices()
                 input_code = gr.Dropdown(
                     choices=stock_choices,
-                    value=stock_choices[0],  # 默认选择第一个（上证指数）
-                    label="Select Stock",
+                    value=None,
+                    label="选择股票",
                     interactive=True,
-                    filterable=True  # 确保只使用 filterable，不要使用 search_keywords
+                    filterable=True
                 )
-            with gr.Column(scale=1):
-                query_btn = gr.Button("Query", variant="primary")
+            
+            with gr.Column(scale=2):
+                # 移除 interactive 参数的显示
+                query_btn = gr.Button("查询", variant="primary")
         
         with gr.Row():
             with gr.Column(scale=4):
@@ -202,18 +209,25 @@ def create_query_tab():
                     show_label=True
                 )
         
-        # 修改查询函数以处理下拉菜单的值
         def query_stock(selected):
-            # 从选择的字符串中提取股票代码
-            stock_code = selected.split(' - ')[0]
+            if not selected or selected in ["请先下载股票数据", "数据库错误，请检查数据下载"]:
+                return None, "请先选择有效的股票"
+            stock_code = selected.split()[0]
             return plot_stock_kline(stock_code)
+        
+        # 使用 lambda 函数直接控制按钮状态
+        def update_button_status(value):
+            if not value or value in ["请先下载股票数据", "数据库错误，请检查数据下载"]:
+                return gr.Button(interactive=False)
+            return gr.Button(interactive=True)
         
         # 绑定事件
         input_code.change(
-            fn=query_stock,
+            fn=update_button_status,
             inputs=input_code,
-            outputs=[plot_output, info_output]
+            outputs=query_btn
         )
+        
         query_btn.click(
             fn=query_stock,
             inputs=input_code,
@@ -221,3 +235,28 @@ def create_query_tab():
         )
     
     return query_tab
+
+def query_stock_data(stock_code):
+    """查询股票数据"""
+    try:
+        # 从选项中提取股票代码（格式："600000 浦发银行" -> "600000"）
+        code = stock_code.split()[0]
+        
+        conn = sqlite3.connect('stock_data.db')
+        # 获取该股票的交易数据
+        query = """
+        SELECT trade_date, open, high, low, close, volume, amount 
+        FROM stock_daily 
+        WHERE code = ? 
+        ORDER BY trade_date DESC
+        """
+        df = pd.read_sql(query, conn, params=(code,))
+        conn.close()
+        
+        if df.empty:
+            return "未找到该股票的交易数据"
+            
+        # ... 处理数据和绘图的代码 ...
+        
+    except Exception as e:
+        return f"查询失败：{str(e)}"
