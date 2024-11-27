@@ -95,7 +95,7 @@ def plot_stock_kline(stock_code="000001"):
         
         # K线图
         ax1 = plt.subplot2grid((5, 1), (0, 0), rowspan=3)
-        title = f'Stock: {stock_code} ({stock_name})\nClose: {last_close} Volume: {last_volume}K\nKDJ(9,3,3) K:{last_k} D:{last_d} J:{last_j}'
+        title = f'Stock: {stock_code} \nClose: {last_close} Volume: {last_volume}K\nKDJ(9,3,3) K:{last_k} D:{last_d} J:{last_j}'
         ax1.set_title(title, fontsize=12, pad=15)
         
         # 绘制K线
