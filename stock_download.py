@@ -99,9 +99,11 @@ def download_stock_data(progress=gr.Progress()):
                 
             try:
                 code = row['code']
+                print(code, start_date, end_date)
                 stock_data = ak.stock_zh_a_hist(symbol=code, 
                                               start_date=start_date.strftime('%Y%m%d'),
                                               end_date=end_date.strftime('%Y%m%d'))
+                # print(stock_data)
                 
                 if not stock_data.empty:
                     # 检查并适配数据列
@@ -128,7 +130,7 @@ def download_stock_data(progress=gr.Progress()):
                 
             except Exception as e:
                 print(f"下载股票 {code} 数据失败：{str(e)}")
-                continue
+                # continue
         
         conn.close()
         is_downloading = False
