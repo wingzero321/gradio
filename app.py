@@ -25,4 +25,5 @@ with gr.Blocks(theme=gr.themes.Soft()) as iface:
             create_predict_tab()
 
 if __name__ == "__main__":
-    iface.launch()
+    # iface.launch()
+    iface.launch(server_name="0.0.0.0", server_port=7860)
